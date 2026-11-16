@@ -35,6 +35,14 @@ export class LinearCalendarView extends ItemView {
         const container = this.containerEl.children[1];
         container.empty();
         container.addClass('linear-calendar-container');
+        container.style.setProperty('--linear-calendar-ui-scale', String(this.plugin.settings.uiFontScale));
+        container.style.setProperty('--linear-calendar-calendar-scale', String(this.plugin.settings.calendarFontScale));
+        container.style.setProperty('--linear-calendar-month-label-scale', String(this.plugin.settings.monthLabelScale));
+        container.style.setProperty('--linear-calendar-weekday-scale', String(this.plugin.settings.weekdayHeaderScale));
+        container.style.setProperty('--linear-calendar-multiday-bar-height', `${this.plugin.settings.multiDayBarHeight}px`);
+        container.style.setProperty('--linear-calendar-multiday-bar-gap', `${this.plugin.settings.multiDayBarGap}px`);
+        container.style.setProperty('--linear-calendar-multiday-base-top', `${this.plugin.settings.multiDayBaseTop}px`);
+        container.style.setProperty('--linear-calendar-month-label-width', String(this.plugin.settings.monthLabelWidth));
 
         await this.renderCalendar(container as HTMLElement);
 
@@ -58,6 +66,11 @@ export class LinearCalendarView extends ItemView {
         const container = this.containerEl.children[1] as HTMLElement;
         if (container) {
             container.empty();
+            container.style.setProperty('--linear-calendar-ui-scale', String(this.plugin.settings.uiFontScale));
+            container.style.setProperty('--linear-calendar-calendar-scale', String(this.plugin.settings.calendarFontScale));
+            container.style.setProperty('--linear-calendar-month-label-scale', String(this.plugin.settings.monthLabelScale));
+            container.style.setProperty('--linear-calendar-weekday-scale', String(this.plugin.settings.weekdayHeaderScale));
+            container.style.setProperty('--linear-calendar-month-label-width', String(this.plugin.settings.monthLabelWidth));
             await this.renderCalendar(container);
         }
     }
@@ -83,6 +96,28 @@ export class LinearCalendarView extends ItemView {
                 }
             }
         });
+    }
+
+    getVisibleMonthsForYear(year: number): number[] {
+        const mode = this.plugin.settings.monthRangeMode;
+        const today = new Date();
+        const currentYear = today.getFullYear();
+        const currentMonth = today.getMonth();
+
+        if (mode === 'all' || year !== currentYear) {
+            return Array.from({ length: 12 }, (_, i) => i);
+        }
+
+        if (mode === 'currentMonthOnward') {
+            return Array.from({ length: 12 - currentMonth }, (_, i) => currentMonth + i);
+        }
+
+        const before = Math.max(0, Math.min(11, this.plugin.settings.monthsBeforeCurrent));
+        const after = Math.max(0, Math.min(11, this.plugin.settings.monthsAfterCurrent));
+        const startMonth = Math.max(0, currentMonth - before);
+        const endMonth = Math.min(11, currentMonth + after);
+
+        return Array.from({ length: endMonth - startMonth + 1 }, (_, i) => startMonth + i);
     }
 
     async renderCalendar(container: HTMLElement): Promise<void> {
@@ -252,101 +287,52 @@ export class LinearCalendarView extends ItemView {
         document.addEventListener('mouseup', handleMouseUp);
 
         const maxDayCells = 37;
-
-        const thead = calendarTable.createEl('thead');
-        const headerRow = thead.createEl('tr');
-
-        // Get enabled custom period groups - each gets its own column (leftmost)
         const enabledGroups = this.plugin.settings.periodicNotes.customPeriodGroups.filter(g => g.enabled);
-        for (const group of enabledGroups) {
-            const th = headerRow.createEl('th', { text: group.name, cls: 'custom-period-header-cell' });
-            // Measure text width and set column width dynamically
-            const canvas = document.createElement('canvas');
-            const ctx = canvas.getContext('2d');
-            if (ctx) {
-                ctx.font = '0.8em var(--font-interface)';
-                const textWidth = ctx.measureText(group.name).width;
-                th.style.width = `${Math.ceil(textWidth) + 16}px`;  // Add padding
-            }
-        }
-
-        // Add quarter column header if quarterly notes enabled (left of month)
         const showQuarterColumn = this.plugin.settings.periodicNotes.quarterly.enabled;
-        if (showQuarterColumn) {
-            headerRow.createEl('th', { text: 'Qtr', cls: 'quarter-header-cell' });
-        }
-
-        headerRow.createEl('th', { cls: 'month-label-cell' });
-
-        // Choose header based on alignment mode
-        if (this.plugin.settings.columnAlignment === 'date') {
-            // Show date numbers (1-31)
-            for (let i = 0; i < 31; i++) {
-                headerRow.createEl('th', {
-                    text: String(i + 1).padStart(2, '0'),
-                    cls: 'weekday-header'
-                });
-            }
-        } else {
-            // Show weekdays with adjustable start day
-            const weekdays = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
-            const startDay = this.plugin.settings.weekStartDay;
-            for (let i = 0; i < maxDayCells; i++) {
-                const dayIndex = (i + startDay) % 7;
-                headerRow.createEl('th', {
-                    text: weekdays[dayIndex],
-                    cls: 'weekday-header'
-                });
-            }
-        }
-        headerRow.createEl('th', { cls: 'month-label-cell-right' });
 
         const tbody = calendarTable.createEl('tbody');
         const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
                            'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
         const cellsPerRow = this.plugin.settings.columnAlignment === 'date' ? 31 : maxDayCells;
+        // Create weekday header row aligned with day columns
+        const leftCols = enabledGroups.length + (showQuarterColumn ? 1 : 0) + 1; // custom period cols + quarter + month label
+        const thead = calendarTable.createEl('thead');
+        const headRow = thead.createEl('tr', { cls: 'weekday-strip' });
 
-        for (let month = 0; month < 12; month++) {
-            await this.renderMonthRow(tbody, year, month, monthNames[month], notesWithDates, multiDayEntries, cellsPerRow, showQuarterColumn, enabledGroups);
+        // Left spacer cells to match period/quarter/month columns
+        for (let lc = 0; lc < leftCols; lc++) {
+            headRow.createEl('th', { cls: 'weekday-header-left' });
         }
 
-        const footerRow = calendarTable.createEl('tfoot').createEl('tr');
+        // Weekday names in pt-BR (short)
+        const weekdayNamesPt = ['Dom.', 'Seg.', 'Ter.', 'Qua.', 'Qui.', 'Sex.', 'Sáb.'];
+        const weekStart = this.plugin.settings.weekStartDay || 0;
+        for (let i = 0; i < cellsPerRow; i++) {
+            // For 'weekday' alignment, columns map to weekdays starting at weekStart
+            // For 'date' alignment we still show repeating weekday abbreviations (best-effort)
+            const weekdayIndex = (weekStart + i) % 7;
+            const th = headRow.createEl('th', { text: weekdayNamesPt[weekdayIndex], cls: 'weekday-header-cell' });
+            th.dataset.colIndex = String(i);
+        }
+        const visibleMonths = this.getVisibleMonthsForYear(year);
 
-        // Add custom period group column footers (leftmost)
-        for (const group of enabledGroups) {
-            footerRow.createEl('td', { text: group.name, cls: 'custom-period-header-cell' });
+        for (let index = 0; index < visibleMonths.length; index++) {
+            const month = visibleMonths[index];
+            await this.renderMonthRow(
+                tbody,
+                year,
+                month,
+                monthNames[month],
+                notesWithDates,
+                multiDayEntries,
+                cellsPerRow,
+                showQuarterColumn,
+                enabledGroups,
+                index === 0
+            );
         }
 
-        // Add quarter column footer if enabled (left of month)
-        if (showQuarterColumn) {
-            footerRow.createEl('td', { text: 'Qtr', cls: 'quarter-header-cell' });
-        }
-
-        footerRow.createEl('td', { cls: 'month-label-cell' });
-
-        // Footer matches header
-        if (this.plugin.settings.columnAlignment === 'date') {
-            // Show date numbers (1-31)
-            for (let i = 0; i < 31; i++) {
-                footerRow.createEl('td', {
-                    text: String(i + 1).padStart(2, '0'),
-                    cls: 'weekday-header'
-                });
-            }
-        } else {
-            // Show weekdays with adjustable start day
-            const weekdays = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
-            const startDay = this.plugin.settings.weekStartDay;
-            for (let i = 0; i < maxDayCells; i++) {
-                const dayIndex = (i + startDay) % 7;
-                footerRow.createEl('td', {
-                    text: weekdays[dayIndex],
-                    cls: 'weekday-header'
-                });
-            }
-        }
-        footerRow.createEl('td', { cls: 'month-label-cell-right' });
     }
 
     async getNotesWithDates(): Promise<Map<string, NoteInfo[]>> {
@@ -864,6 +850,21 @@ export class LinearCalendarView extends ItemView {
             }
         }
 
+        // Debug logging to help diagnose date parsing issues (view in Obsidian DevTools Console)
+        try {
+            const fm = this.app.metadataCache.getFileCache(file)?.frontmatter;
+            // Log minimal, useful info
+            console.log('[LinearCalendar] extractDateFromFile', {
+                path: file.path,
+                frontmatter: fm,
+                startSources,
+                endSources,
+                result
+            });
+        } catch (e) {
+            console.warn('[LinearCalendar] failed to log extractDateFromFile debug info', e);
+        }
+
         return result;
     }
 
@@ -1124,7 +1125,7 @@ export class LinearCalendarView extends ItemView {
     }
 
     async openOrCreateDailyNote(date: Date): Promise<void> {
-        const filename = this.formatDateForDailyNote(date);
+        const filename = this.formatDateForDailyNote(date)
         const folderPath = this.getDailyNoteFolder();
 
         // Try to find existing daily note first
@@ -1941,7 +1942,8 @@ export class LinearCalendarView extends ItemView {
         multiDayEntries: Map<string, MultiDayEntry>,
         maxDayCells: number,
         showQuarterColumn: boolean = false,
-        enabledGroups: CustomPeriodGroup[] = []
+        enabledGroups: CustomPeriodGroup[] = [],
+        isFirstVisibleMonth: boolean = false
     ): Promise<void> {
         const periodicSettings = this.plugin.settings.periodicNotes;
         const weekDisplayMode = periodicSettings.weekly.enabled ? periodicSettings.weekNumberDisplay : 'none';
@@ -1951,8 +1953,8 @@ export class LinearCalendarView extends ItemView {
         // Note: Custom period and quarter cells are created in the week row (first row) with doubled rowSpan
         // to cover both the week row and month row for each month in the span
         if (weekDisplayMode === 'header-row') {
-            // Add month-first-row class to create thicker border between months (except first month)
-            const weekRowClass = month > 0 ? 'week-header-row month-first-row' : 'week-header-row';
+            // Add month-first-row class to create thicker border between months (except first visible month)
+            const weekRowClass = isFirstVisibleMonth ? 'week-header-row' : 'week-header-row month-first-row';
             const weekRow = tbody.createEl('tr', { cls: weekRowClass });
 
             // Add custom period cells - these go in the week row with doubled rowSpan
@@ -2101,14 +2103,11 @@ export class LinearCalendarView extends ItemView {
                 const emptyCell = weekRow.createEl('td', { cls: 'week-header-cell empty' });
                 emptyCell.colSpan = remainingCells;
             }
-
-            // Add empty cell for right month label column
-            weekRow.createEl('td', { cls: 'month-label-right empty' });
         }
 
         // Add month-first-row class to create thicker border between months (except first month)
         // Only add to month row when weekDisplayMode is not 'header-row' (in that case, week row has the class)
-        const monthRowClass = (month > 0 && weekDisplayMode !== 'header-row') ? 'month-row month-first-row' : 'month-row';
+        const monthRowClass = (!isFirstVisibleMonth && weekDisplayMode !== 'header-row') ? 'month-row month-first-row' : 'month-row';
         const row = tbody.createEl('tr', { cls: monthRowClass });
 
         // Add custom period cells for each enabled group (leftmost columns)
@@ -2252,7 +2251,12 @@ export class LinearCalendarView extends ItemView {
         });
 
         const maxBarRow = occupiedRows.length > 0 ? Math.max(...occupiedRows.map(o => o.row)) : -1;
-        const topPadding = (maxBarRow + 1) * 16 + 18;
+        // Multi-day bar row sizing: bar height plus a small gap between stacked bars
+        // Read multi-day bar sizing from settings
+        const multiDayRowHeight = this.plugin.settings.multiDayBarHeight ?? 16; // px per bar height
+        const multiDayRowGap = this.plugin.settings.multiDayBarGap ?? 4; // px gap between stacked bars
+        const multiDayRowSpacing = multiDayRowHeight + multiDayRowGap;
+        const topPadding = (maxBarRow + 1) * multiDayRowSpacing + (this.plugin.settings.multiDayBaseTop ?? 18);
 
         // Add empty cells for alignment (only in weekday mode)
         for (let i = 0; i < columnOffset; i++) {
@@ -2273,10 +2277,21 @@ export class LinearCalendarView extends ItemView {
 
             const dayCell = row.createEl('td', { cls: 'day-cell' });
 
-            // Add highlighted class for weekends or other highlighted weekdays
-            const highlightedWeekdays = this.plugin.settings.highlightedWeekdays || [0, 6];
-            if (highlightedWeekdays.includes(dayOfWeek)) {
-                dayCell.addClass('day-cell-highlighted');
+            // Add alternating week highlight or highlighted weekday style
+            if (this.plugin.settings.alternatingWeekHighlights) {
+                const weekStartMonday = moment(date).startOf('isoWeek');
+                const baseWeek = moment('1970-01-05').startOf('isoWeek');
+                const weekIndex = weekStartMonday.diff(baseWeek, 'weeks');
+                const highlightColor = weekIndex % 2 === 0
+                    ? this.plugin.settings.alternatingWeekHighlightColor1
+                    : this.plugin.settings.alternatingWeekHighlightColor2;
+                dayCell.style.background = highlightColor;
+                dayCell.addClass('day-cell-week-alt');
+            } else {
+                const highlightedWeekdays = this.plugin.settings.highlightedWeekdays || [0, 6];
+                if (highlightedWeekdays.includes(dayOfWeek)) {
+                    dayCell.addClass('day-cell-highlighted');
+                }
             }
 
             // For 'extra-column' mode: add border and week number to week start cells
@@ -2396,6 +2411,9 @@ export class LinearCalendarView extends ItemView {
 
                     // Apply color
                     noteLink.style.background = this.getColorForFile(noteInfo.file);
+                    if (date.getTime() === today.getTime()) {
+                        noteLink.style.color = 'var(--text-on-accent)';
+                    }
 
                     // Add icon if exists
                     const icon = this.getIconForFile(noteInfo.file);
@@ -2412,7 +2430,10 @@ export class LinearCalendarView extends ItemView {
 
                     // Add title — use recurringLabel when available
                     const displayText = noteInfo.recurringLabel ?? this.getDisplayName(noteInfo.file);
-                    noteLink.createEl('span', { text: displayText });
+                    // remove dates in the format xxxx-xx-xx from the display text if present
+                    const datePattern = /\b\d{4}-\d{2}-\d{2}\b/g;
+                    const cleanedDisplayText = displayText.replace(datePattern, '').trim();
+                    noteLink.createEl('span', { text: cleanedDisplayText });
 
                     noteLink.setAttr('data-href', noteInfo.file.path);
 
@@ -2478,8 +2499,11 @@ export class LinearCalendarView extends ItemView {
 
                 // Apply color to bar
                 multiDayBar.style.background = this.getColorForFile(entry.file);
-                multiDayBar.style.top = `${20 + (pos.rowIndex * 16)}px`;
+                // Record row index for later precise stacking; set temporary top
+                multiDayBar.dataset.rowIndex = String(pos.rowIndex);
                 multiDayBar.dataset.span = pos.span.toString();
+                const baseTopTemp = this.plugin.settings.multiDayBaseTop ?? 20;
+                multiDayBar.style.top = `${baseTopTemp + (pos.rowIndex * multiDayRowSpacing)}px`;
 
                 const noteLink = multiDayBar.createEl('a', {
                     cls: 'multi-day-link internal-link',
@@ -2549,27 +2573,44 @@ export class LinearCalendarView extends ItemView {
             }
         });
 
-        // Create right month label cell - make clickable if monthly notes enabled
-        const monthLabelRightCell = row.createEl('td', { cls: 'month-label-right' });
+        // After creating bars, recompute stacked tops using measured heights to avoid overlaps
+        requestAnimationFrame(() => {
+            const allBars = Array.from(calendarTable.querySelectorAll<HTMLElement>('.multi-day-bar')) as HTMLElement[];
+            if (allBars.length > 0) {
+                const gap = 4; // px gap between stacked bars (matches earlier gap)
+                const rows = new Map<number, HTMLElement[]>();
+                allBars.forEach(b => {
+                    const r = parseInt(b.dataset.rowIndex || '0');
+                    if (!rows.has(r)) rows.set(r, []);
+                    rows.get(r)!.push(b);
+                });
 
-        if (monthlyEnabled) {
-            const monthLinkRight = monthLabelRightCell.createEl('a', {
-                text: monthName,
-                cls: 'month-label-link'
-            });
-            // Apply monthly color if set
-            const monthlyColor = periodicSettings.monthly.color;
-            if (monthlyColor) {
-                monthLinkRight.style.color = monthlyColor;
+                const rowIndices = Array.from(rows.keys()).sort((a, b) => a - b);
+                const rowHeights: number[] = [];
+                rowIndices.forEach((r, idx) => {
+                    const bars = rows.get(r)!;
+                    const maxH = Math.max(...bars.map(x => Math.ceil(x.getBoundingClientRect().height)));
+                    rowHeights[idx] = maxH;
+                });
+
+                const baseTop = this.plugin.settings.multiDayBaseTop ?? 20;
+                const rowTopMap = new Map<number, number>();
+                let cumulative = baseTop;
+                rowHeights.forEach((h, i) => {
+                    const r = rowIndices[i];
+                    rowTopMap.set(r, cumulative);
+                    cumulative += h + gap;
+                });
+
+                allBars.forEach(b => {
+                    const r = parseInt(b.dataset.rowIndex || '0');
+                    const top = rowTopMap.get(r) ?? baseTop;
+                    b.style.top = `${top}px`;
+                });
             }
-            monthLinkRight.onclick = async (e) => {
-                e.preventDefault();
-                const monthDate = new Date(year, month, 1);
-                await this.openOrCreateMonthlyNote(monthDate);
-            };
-        } else {
-            monthLabelRightCell.textContent = monthName;
-        }
+        });
+
+        // Create right month label cell - make clickable if monthly notes enabled
     }
 
     async onClose(): Promise<void> {

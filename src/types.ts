@@ -14,8 +14,23 @@ export interface LinearCalendarSettings {
     columnAlignment: 'weekday' | 'date';  // Align columns by weekday or by date
     weekStartDay: number;  // 0 = Sunday, 1 = Monday, etc.
     highlightedWeekdays: number[];  // Weekdays to highlight (0 = Sunday, 6 = Saturday)
+    alternatingWeekHighlights: boolean;  // Highlight all days with alternating weekly pastel colors
+    alternatingWeekHighlightColor1: string;  // First alternating week highlight color
+    alternatingWeekHighlightColor2: string;  // Second alternating week highlight color
     showCellBorders: boolean;  // Show thin borders around day cells
     showWeekSpanBorders: boolean;  // Show borders on bottom of week span cells (header-row mode)
+    uiFontScale: number;  // Scale factor for plugin UI elements outside the calendar grid
+    calendarFontScale: number;  // Scale factor for the calendar grid and day display
+    monthLabelScale: number;  // Scale factor for the left month bar labels
+    weekdayHeaderScale: number; // Scale factor for the weekday header text
+    monthLabelWidth: number;  // Width of the left month bar column in pixels
+    multiDayBarHeight: number; // Height in px for multi-day bars
+    multiDayBarGap: number; // Gap in px between stacked multi-day bars
+    multiDayBaseTop: number; // Base top offset in px for the first multi-day bar
+
+    monthRangeMode: 'all' | 'currentMonthOnward' | 'custom';
+    monthsBeforeCurrent: number;
+    monthsAfterCurrent: number;
 
     // Simplified date extraction settings
     dateExtraction: DateExtractionConfig;
@@ -343,8 +358,23 @@ export const DEFAULT_SETTINGS: LinearCalendarSettings = {
     columnAlignment: 'weekday',  // Align by weekday by default
     weekStartDay: 0,  // Sunday by default
     highlightedWeekdays: [0, 6],  // Saturday and Sunday by default
+    alternatingWeekHighlights: false,  // Use alternating weekly pastel highlights when enabled
+    alternatingWeekHighlightColor1: '#dbeafe',
+    alternatingWeekHighlightColor2: '#f5d0fe',
     showCellBorders: true,  // Show cell borders by default
     showWeekSpanBorders: false,  // No week span borders by default
+    uiFontScale: 1,
+    calendarFontScale: 1,
+    monthLabelScale: 1,
+    weekdayHeaderScale: 1,
+    multiDayBarHeight: 16,
+    multiDayBarGap: 4,
+    multiDayBaseTop: 20,
+    monthLabelWidth: 35,
+
+    monthRangeMode: 'all',
+    monthsBeforeCurrent: 0,
+    monthsAfterCurrent: 0,
 
     dateExtraction: {
         startFromProperties: ['date'],

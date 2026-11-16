@@ -391,6 +391,168 @@ export class CalendarSettingTab extends PluginSettingTab {
         }
 
         new Setting(containerEl)
+            .setName('Calendar font scale')
+            .setDesc('Adjust the size of the calendar grid text and day labels. Enter a value between 0.75 and 2.0.')
+            .addText(text => text
+                .setPlaceholder('1.0')
+                .setValue(String(this.plugin.settings.calendarFontScale))
+                .onChange(async (value) => {
+                    const numValue = parseFloat(value);
+                    if (!isNaN(numValue) && numValue >= 0.75 && numValue <= 2.0) {
+                        this.plugin.settings.calendarFontScale = numValue;
+                        await this.plugin.saveSettings();
+                    }
+                }));
+
+        new Setting(containerEl)
+            .setName('Weekday header scale')
+            .setDesc('Scale factor for weekday header text (0.6 - 2.0).')
+            .addText(text => text
+                .setPlaceholder('1.0')
+                .setValue(String(this.plugin.settings.weekdayHeaderScale))
+                .onChange(async (value) => {
+                    const numValue = parseFloat(value);
+                    if (!isNaN(numValue) && numValue >= 0.6 && numValue <= 2.0) {
+                        this.plugin.settings.weekdayHeaderScale = numValue;
+                        await this.plugin.saveSettings();
+                    }
+                }));
+
+        // Multi-day bar sizing settings
+        new Setting(containerEl)
+            .setName('Multi-day bar height')
+            .setDesc('Height in pixels for multi-day event bars (8 - 48).')
+            .addText(text => text
+                .setPlaceholder('16')
+                .setValue(String(this.plugin.settings.multiDayBarHeight))
+                .onChange(async (value) => {
+                    const numValue = parseInt(value);
+                    if (!isNaN(numValue) && numValue >= 8 && numValue <= 48) {
+                        this.plugin.settings.multiDayBarHeight = numValue;
+                        await this.plugin.saveSettings();
+                        this.display();
+                    }
+                }));
+
+        new Setting(containerEl)
+            .setName('Multi-day bar gap')
+            .setDesc('Vertical gap in pixels between stacked multi-day bars (0 - 20).')
+            .addText(text => text
+                .setPlaceholder('4')
+                .setValue(String(this.plugin.settings.multiDayBarGap))
+                .onChange(async (value) => {
+                    const numValue = parseInt(value);
+                    if (!isNaN(numValue) && numValue >= 0 && numValue <= 20) {
+                        this.plugin.settings.multiDayBarGap = numValue;
+                        await this.plugin.saveSettings();
+                        this.display();
+                    }
+                }));
+
+        new Setting(containerEl)
+            .setName('Multi-day base top')
+            .setDesc('Vertical offset in pixels from the top of the day cell where bars start (0 - 40).')
+            .addText(text => text
+                .setPlaceholder('20')
+                .setValue(String(this.plugin.settings.multiDayBaseTop))
+                .onChange(async (value) => {
+                    const numValue = parseInt(value);
+                    if (!isNaN(numValue) && numValue >= 0 && numValue <= 40) {
+                        this.plugin.settings.multiDayBaseTop = numValue;
+                        await this.plugin.saveSettings();
+                        this.display();
+                    }
+                }));
+
+        new Setting(containerEl)
+            .setName('Month label scale')
+            .setDesc('Adjust the month label text size to avoid overflow. Enter a value between 0.5 and 2.0.')
+            .addText(text => text
+                .setPlaceholder('1.0')
+                .setValue(String(this.plugin.settings.monthLabelScale))
+                .onChange(async (value) => {
+                    const numValue = parseFloat(value);
+                    if (!isNaN(numValue) && numValue >= 0.5 && numValue <= 2.0) {
+                        this.plugin.settings.monthLabelScale = numValue;
+                        await this.plugin.saveSettings();
+                    }
+                }));
+
+        new Setting(containerEl)
+            .setName('Month label width')
+            .setDesc('Set the left month label column width in pixels. Enter a value between 30 and 120.')
+            .addText(text => text
+                .setPlaceholder('35')
+                .setValue(String(this.plugin.settings.monthLabelWidth))
+                .onChange(async (value) => {
+                    const numValue = parseInt(value);
+                    if (!isNaN(numValue) && numValue >= 30 && numValue <= 120) {
+                        this.plugin.settings.monthLabelWidth = numValue;
+                        await this.plugin.saveSettings();
+                    }
+                }));
+
+        new Setting(containerEl)
+            .setName('Plugin UI scale')
+            .setDesc('Adjust the size of the plugin UI outside the calendar grid (header, controls, buttons). Enter a value between 0.75 and 2.0.')
+            .addText(text => text
+                .setPlaceholder('1.0')
+                .setValue(String(this.plugin.settings.uiFontScale))
+                .onChange(async (value) => {
+                    const numValue = parseFloat(value);
+                    if (!isNaN(numValue) && numValue >= 0.75 && numValue <= 2.0) {
+                        this.plugin.settings.uiFontScale = numValue;
+                        await this.plugin.saveSettings();
+                    }
+                }));
+
+        new Setting(containerEl)
+            .setName('Month display range')
+            .setDesc('Choose which months to show in the calendar year view.')
+            .addDropdown(dropdown => {
+                dropdown
+                    .addOption('all', 'Show all months')
+                    .addOption('currentMonthOnward', 'Show current month onwards')
+                    .addOption('custom', 'Show custom range around current month')
+                    .setValue(this.plugin.settings.monthRangeMode)
+                    .onChange(async (value) => {
+                        this.plugin.settings.monthRangeMode = value as 'all' | 'currentMonthOnward' | 'custom';
+                        await this.plugin.saveSettings();
+                        this.display();
+                    });
+            });
+
+        if (this.plugin.settings.monthRangeMode === 'custom') {
+            new Setting(containerEl)
+                .setName('Months before current')
+                .setDesc('How many months before the current month should be visible.')
+                .addText(text => text
+                    .setPlaceholder('0')
+                    .setValue(String(this.plugin.settings.monthsBeforeCurrent))
+                    .onChange(async (value) => {
+                        const numValue = parseInt(value);
+                        if (!isNaN(numValue) && numValue >= 0 && numValue <= 11) {
+                            this.plugin.settings.monthsBeforeCurrent = numValue;
+                            await this.plugin.saveSettings();
+                        }
+                    }));
+
+            new Setting(containerEl)
+                .setName('Months after current')
+                .setDesc('How many months after the current month should be visible.')
+                .addText(text => text
+                    .setPlaceholder('0')
+                    .setValue(String(this.plugin.settings.monthsAfterCurrent))
+                    .onChange(async (value) => {
+                        const numValue = parseInt(value);
+                        if (!isNaN(numValue) && numValue >= 0 && numValue <= 11) {
+                            this.plugin.settings.monthsAfterCurrent = numValue;
+                            await this.plugin.saveSettings();
+                        }
+                    }));
+        }
+
+        new Setting(containerEl)
             .setName('Column alignment')
             .setDesc('Choose how to align the calendar columns: by weekday or by date (all 1st days align, all 2nd days align, etc.)')
             .addDropdown(dropdown => {
@@ -427,37 +589,78 @@ export class CalendarSettingTab extends PluginSettingTab {
                 });
         }
 
-        // Highlighted weekdays setting
-        const weekdayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-        const highlightedSetting = new Setting(containerEl)
-            .setName('Highlighted weekdays')
-            .setDesc('Choose which weekdays to visually highlight (typically weekends)');
+        new Setting(containerEl)
+            .setName('Alternating weekly highlights')
+            .setDesc('Highlight all days in alternating colors by Monday-Sunday week.')
+            .addToggle(toggle => toggle
+                .setValue(this.plugin.settings.alternatingWeekHighlights)
+                .onChange(async (value) => {
+                    this.plugin.settings.alternatingWeekHighlights = value;
+                    await this.plugin.saveSettings();
+                    this.display();
+                }));
 
-        const checkboxContainer = highlightedSetting.controlEl.createDiv();
-        checkboxContainer.style.cssText = 'display: flex; flex-wrap: wrap; gap: 8px;';
-
-        weekdayNames.forEach((name, index) => {
-            const label = checkboxContainer.createEl('label');
-            label.style.cssText = 'display: flex; align-items: center; gap: 4px; cursor: pointer; font-size: 0.9em;';
-
-            const checkbox = label.createEl('input', { type: 'checkbox' });
-            checkbox.checked = this.plugin.settings.highlightedWeekdays.includes(index);
-            checkbox.onchange = async () => {
-                const current = this.plugin.settings.highlightedWeekdays;
-                if (checkbox.checked) {
-                    if (!current.includes(index)) {
-                        current.push(index);
-                        current.sort((a, b) => a - b);
-                    }
-                } else {
-                    const idx = current.indexOf(index);
-                    if (idx > -1) current.splice(idx, 1);
-                }
+        if (this.plugin.settings.alternatingWeekHighlights) {
+            const color1Setting = new Setting(containerEl)
+                .setName('Week 1 color')
+                .setDesc('Color for the first alternating week.')
+                .addExtraButton(button => {
+                    const container = button.setIcon('palette');
+                    button.setTooltip('Pick a color for week 1');
+                    return button;
+                });
+            this.renderColorPicker(color1Setting.controlEl, this.plugin.settings.alternatingWeekHighlightColor1, async (color) => {
+                this.plugin.settings.alternatingWeekHighlightColor1 = color;
                 await this.plugin.saveSettings();
-            };
+            });
 
-            label.createEl('span', { text: name.slice(0, 3) });
-        });
+            const color2Setting = new Setting(containerEl)
+                .setName('Week 2 color')
+                .setDesc('Color for the second alternating week.')
+                .addExtraButton(button => {
+                    const container = button.setIcon('palette');
+                    button.setTooltip('Pick a color for week 2');
+                    return button;
+                });
+            this.renderColorPicker(color2Setting.controlEl, this.plugin.settings.alternatingWeekHighlightColor2, async (color) => {
+                this.plugin.settings.alternatingWeekHighlightColor2 = color;
+                await this.plugin.saveSettings();
+            });
+        }
+
+        if (!this.plugin.settings.alternatingWeekHighlights) {
+            // Highlighted weekdays setting
+            const weekdayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+            const highlightedSetting = new Setting(containerEl)
+                .setName('Highlighted weekdays')
+                .setDesc('Choose which weekdays to visually highlight (typically weekends)');
+
+            const checkboxContainer = highlightedSetting.controlEl.createDiv();
+            checkboxContainer.style.cssText = 'display: flex; flex-wrap: wrap; gap: 8px;';
+
+            weekdayNames.forEach((name, index) => {
+                const label = checkboxContainer.createEl('label');
+                label.style.cssText = 'display: flex; align-items: center; gap: 4px; cursor: pointer; font-size: 0.9em;';
+
+                const checkbox = label.createEl('input', { type: 'checkbox' });
+                checkbox.checked = this.plugin.settings.highlightedWeekdays.includes(index);
+                checkbox.onchange = async () => {
+                    const current = this.plugin.settings.highlightedWeekdays;
+                    if (checkbox.checked) {
+                        if (!current.includes(index)) {
+                            current.push(index);
+                            current.sort((a, b) => a - b);
+                        }
+                    } else {
+                        const idx = current.indexOf(index);
+                        if (idx > -1) current.splice(idx, 1);
+                    }
+                    await this.plugin.saveSettings();
+                };
+
+                label.createEl('span', { text: name.slice(0, 3) });
+            });
+        }
 
         // Cell borders toggle
         new Setting(containerEl)
