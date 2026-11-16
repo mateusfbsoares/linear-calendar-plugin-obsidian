@@ -32,7 +32,7 @@ export class LinearCalendarView extends ItemView {
     }
 
     async onOpen(): Promise<void> {
-        const container = this.containerEl.children[1];
+        const container = this.containerEl.children[1] as HTMLElement;
         container.empty();
         container.addClass('linear-calendar-container');
         container.style.setProperty('--linear-calendar-ui-scale', String(this.plugin.settings.uiFontScale));
@@ -122,34 +122,74 @@ export class LinearCalendarView extends ItemView {
 
     async renderCalendar(container: HTMLElement): Promise<void> {
         const year = this.plugin.settings.currentYear;
+        const isSuperlinear = this.plugin.settings.calendarMode === 'superlinear';
+        const visibleDates = isSuperlinear ? this.getSuperlinearDates() : null;
 
         const header = container.createDiv({ cls: 'calendar-header' });
+        if (isSuperlinear) header.addClass('calendar-header-superlinear');
 
-        // Left spacer for centering
-        header.createDiv({ cls: 'header-spacer' });
+        const leftSection = header.createDiv({ cls: 'header-spacer' });
+        const modeToggle = leftSection.createEl('button', {
+            text: 'Superlinear',
+            cls: 'calendar-mode-toggle'
+        });
+        modeToggle.type = 'button';
+        modeToggle.setAttribute('aria-label', 'Superlinear mode');
+        modeToggle.setAttribute('aria-pressed', String(isSuperlinear));
+        modeToggle.title = isSuperlinear ? 'Switch to normal calendar' : 'Show today through 35 days ahead';
+        modeToggle.onclick = async () => {
+            this.plugin.settings.calendarMode = isSuperlinear ? 'normal' : 'superlinear';
+            await this.plugin.saveSettings();
+            // saveSettings reloads every open calendar view.
+            container.querySelector<HTMLButtonElement>('.calendar-mode-toggle')?.focus();
+        };
 
         // Center section with year navigation
         const centerSection = header.createDiv({ cls: 'header-center' });
-        const prevBtn = centerSection.createEl('button', { text: '←', cls: 'year-nav-btn' });
-
-        // Make year title clickable if yearly notes enabled
-        const yearlyEnabled = this.plugin.settings.periodicNotes.yearly.enabled;
-        if (yearlyEnabled) {
-            const yearLink = centerSection.createEl('a', { text: `${year}`, cls: 'year-title year-title-link' });
-            // Apply yearly color if set
-            const yearlyColor = this.plugin.settings.periodicNotes.yearly.color;
-            if (yearlyColor) {
-                yearLink.style.color = yearlyColor;
-            }
-            yearLink.onclick = async (e) => {
-                e.preventDefault();
-                await this.openOrCreateYearlyNote(year);
-            };
+        if (visibleDates) {
+            const formatDate = (date: Date) => date.toLocaleDateString(undefined, {
+                month: 'short', day: 'numeric', year: 'numeric'
+            });
+            centerSection.createEl('span', {
+                text: `${formatDate(visibleDates[0])} – ${formatDate(visibleDates[visibleDates.length - 1])}`,
+                cls: 'year-title superlinear-range-title'
+            });
         } else {
-            centerSection.createEl('span', { text: `${year}`, cls: 'year-title' });
-        }
+            const prevBtn = centerSection.createEl('button', { text: '←', cls: 'year-nav-btn' });
 
-        const nextBtn = centerSection.createEl('button', { text: '→', cls: 'year-nav-btn' });
+            // Make year title clickable if yearly notes enabled
+            const yearlyEnabled = this.plugin.settings.periodicNotes.yearly.enabled;
+            if (yearlyEnabled) {
+                const yearLink = centerSection.createEl('a', { text: `${year}`, cls: 'year-title year-title-link' });
+                // Apply yearly color if set
+                const yearlyColor = this.plugin.settings.periodicNotes.yearly.color;
+                if (yearlyColor) {
+                    yearLink.style.color = yearlyColor;
+                }
+                yearLink.onclick = async (e) => {
+                    e.preventDefault();
+                    await this.openOrCreateYearlyNote(year);
+                };
+            } else {
+                centerSection.createEl('span', { text: `${year}`, cls: 'year-title' });
+            }
+
+            const nextBtn = centerSection.createEl('button', { text: '→', cls: 'year-nav-btn' });
+
+            prevBtn.onclick = async () => {
+                this.plugin.settings.currentYear--;
+                await this.plugin.saveSettings();
+                container.empty();
+                await this.renderCalendar(container);
+            };
+
+            nextBtn.onclick = async () => {
+                this.plugin.settings.currentYear++;
+                await this.plugin.saveSettings();
+                container.empty();
+                await this.renderCalendar(container);
+            };
+        }
 
         // Right section with Add Note button
         const rightSection = header.createDiv({ cls: 'header-right' });
@@ -178,22 +218,9 @@ export class LinearCalendarView extends ItemView {
             (this.app as any).setting.openTabById('linear-calendar');
         };
 
-        prevBtn.onclick = async () => {
-            this.plugin.settings.currentYear--;
-            await this.plugin.saveSettings();
-            container.empty();
-            await this.renderCalendar(container);
-        };
-
-        nextBtn.onclick = async () => {
-            this.plugin.settings.currentYear++;
-            await this.plugin.saveSettings();
-            container.empty();
-            await this.renderCalendar(container);
-        };
-
-        const notesWithDates = await this.getNotesWithDates();
-        const multiDayEntries = this.processMultiDayEntries(notesWithDates);
+        const notesWithDates = await this.getNotesWithDates(
+            visibleDates?.[0], visibleDates?.[visibleDates.length - 1]
+        );
 
         const bannerCtx = { isBratUser: this.plugin.isBratUser };
         for (const banner of BANNERS) {
@@ -286,6 +313,12 @@ export class LinearCalendarView extends ItemView {
         this.mouseUpHandler = handleMouseUp;
         document.addEventListener('mouseup', handleMouseUp);
 
+        if (visibleDates) {
+            this.renderSuperlinearCalendar(calendarTable, visibleDates, notesWithDates);
+            return;
+        }
+
+        const multiDayEntries = this.processMultiDayEntries(notesWithDates);
         const maxDayCells = 37;
         const enabledGroups = this.plugin.settings.periodicNotes.customPeriodGroups.filter(g => g.enabled);
         const showQuarterColumn = this.plugin.settings.periodicNotes.quarterly.enabled;
@@ -335,7 +368,108 @@ export class LinearCalendarView extends ItemView {
 
     }
 
-    async getNotesWithDates(): Promise<Map<string, NoteInfo[]>> {
+    private getSuperlinearDates(): Date[] {
+        const today = new Date();
+        // Local calendar dates keep the range correct across daylight saving changes.
+        return Array.from({ length: 36 }, (_, offset) =>
+            new Date(today.getFullYear(), today.getMonth(), today.getDate() + offset)
+        );
+    }
+
+    private renderSuperlinearCalendar(
+        table: HTMLTableElement,
+        dates: Date[],
+        notesMap: Map<string, NoteInfo[]>
+    ): void {
+        table.addClass('linear-calendar-superlinear');
+        const thead = table.createEl('thead');
+        const monthRow = thead.createEl('tr', { cls: 'superlinear-month-strip' });
+        const weekdayRow = thead.createEl('tr', { cls: 'weekday-strip' });
+        const weekdayNames = ['Dom.', 'Seg.', 'Ter.', 'Qua.', 'Qui.', 'Sex.', 'Sáb.'];
+        let monthCell: HTMLTableCellElement | null = null;
+
+        dates.forEach((date, index) => {
+            const isMonthStart = index > 0 && date.getMonth() !== dates[index - 1].getMonth();
+            if (!monthCell || isMonthStart) {
+                monthCell = monthRow.createEl('th', { cls: 'superlinear-month-label' });
+                monthCell.scope = 'colgroup';
+                monthCell.colSpan = 1;
+                const label = date.toLocaleDateString(undefined, { month: 'short', year: 'numeric' });
+                if (this.plugin.settings.periodicNotes.monthly.enabled) {
+                    const link = monthCell.createEl('a', { text: label, cls: 'month-label-link' });
+                    const color = this.plugin.settings.periodicNotes.monthly.color;
+                    if (color) link.style.color = color;
+                    link.onclick = async (event) => {
+                        event.preventDefault();
+                        await this.openOrCreateMonthlyNote(new Date(date.getFullYear(), date.getMonth(), 1));
+                    };
+                } else {
+                    monthCell.textContent = label;
+                }
+                if (isMonthStart) monthCell.addClass('month-boundary');
+            } else {
+                monthCell.colSpan++;
+            }
+
+            const weekdayCell = weekdayRow.createEl('th', {
+                text: weekdayNames[date.getDay()], cls: 'weekday-header-cell'
+            });
+            weekdayCell.scope = 'col';
+            weekdayCell.dataset.colIndex = String(index);
+            if (isMonthStart) weekdayCell.addClass('month-boundary');
+        });
+
+        const tbody = table.createEl('tbody');
+        const periodicSettings = this.plugin.settings.periodicNotes;
+        if (periodicSettings.weekly.enabled && periodicSettings.weekNumberDisplay === 'header-row') {
+            const weekRow = tbody.createEl('tr', { cls: 'week-header-row' });
+            let weekCell: HTMLTableCellElement | null = null;
+            dates.forEach((date, index) => {
+                const isMonthStart = index > 0 && date.getMonth() !== dates[index - 1].getMonth();
+                if (!weekCell || date.getDay() === this.plugin.settings.weekStartDay || isMonthStart) {
+                    weekCell = weekRow.createEl('td', { cls: 'week-header-cell' });
+                    weekCell.colSpan = 1;
+                    if (isMonthStart) weekCell.addClass('month-boundary');
+                    const weekStart = new Date(date);
+                    weekStart.setDate(date.getDate() - (date.getDay() - this.plugin.settings.weekStartDay + 7) % 7);
+                    const weekNumber = (window as any).moment(weekStart).week();
+                    const link = weekCell.createEl('a', {
+                        text: `W${String(weekNumber).padStart(2, '0')}`, cls: 'week-header-link'
+                    });
+                    if (periodicSettings.weekly.color) link.style.color = periodicSettings.weekly.color;
+                    link.onclick = async (event) => {
+                        event.preventDefault();
+                        await this.openOrCreateWeeklyNote(date);
+                    };
+                } else {
+                    weekCell.colSpan++;
+                }
+            });
+        }
+
+        // Keep each multi-day note continuous across month and year boundaries, clipping to the window.
+        const entries: MultiDayEntry[] = [];
+        const firstDate = dates[0];
+        const lastDate = dates[dates.length - 1];
+        notesMap.forEach(notes => notes.forEach(note => {
+            if (!note.isMultiDay || !note.endDate || !this.shouldShowNote(note.file)) return;
+            const start = new Date(note.startDate.getFullYear(), note.startDate.getMonth(), note.startDate.getDate());
+            const end = new Date(note.endDate.getFullYear(), note.endDate.getMonth(), note.endDate.getDate());
+            if (isNaN(end.getTime()) || end < start || start > lastDate || end < firstDate) return;
+            entries.push({
+                file: note.file,
+                startDate: start < firstDate ? firstDate : start,
+                endDate: end > lastDate ? lastDate : end,
+                month: start.getMonth(),
+                year: start.getFullYear()
+            });
+        }));
+
+        const row = tbody.createEl('tr', { cls: 'month-row superlinear-row' });
+        this.renderDayRow(row, dates, notesMap, entries, 0, dates.length);
+    }
+
+    async getNotesWithDates(rangeStart?: Date, rangeEnd?: Date): Promise<Map<string, NoteInfo[]>> {
         const notesMap = new Map<string, NoteInfo[]>();
         const files = this.app.vault.getMarkdownFiles();
 
@@ -367,7 +501,7 @@ export class LinearCalendarView extends ItemView {
 
         // Merge recurring entries
         if (this.plugin.settings.recurringEvents.enabled) {
-            const recurringEntries = this.expandRecurringEntries(notesMap);
+            const recurringEntries = this.expandRecurringEntries(notesMap, rangeStart, rangeEnd);
             for (const [key, entries] of recurringEntries) {
                 if (!notesMap.has(key)) {
                     notesMap.set(key, []);
@@ -379,13 +513,17 @@ export class LinearCalendarView extends ItemView {
         return notesMap;
     }
 
-    private expandRecurringEntries(existingMap: Map<string, NoteInfo[]>): Map<string, NoteInfo[]> {
+    private expandRecurringEntries(existingMap: Map<string, NoteInfo[]>, rangeStart?: Date, rangeEnd?: Date): Map<string, NoteInfo[]> {
         const result = new Map<string, NoteInfo[]>();
         const config = this.plugin.settings.recurringEvents;
         const year = this.plugin.settings.currentYear;
         // Use UTC boundaries so rrule comparisons are consistent
-        const yearStartUtc = new Date(Date.UTC(year, 0, 1));
-        const yearEndUtc = new Date(Date.UTC(year, 11, 31, 23, 59, 59));
+        const yearStartUtc = rangeStart
+            ? new Date(Date.UTC(rangeStart.getFullYear(), rangeStart.getMonth(), rangeStart.getDate()))
+            : new Date(Date.UTC(year, 0, 1));
+        const yearEndUtc = rangeEnd
+            ? new Date(Date.UTC(rangeEnd.getFullYear(), rangeEnd.getMonth(), rangeEnd.getDate(), 23, 59, 59))
+            : new Date(Date.UTC(year, 11, 31, 23, 59, 59));
 
         const files = this.app.vault.getMarkdownFiles();
 
@@ -2214,8 +2352,6 @@ export class LinearCalendarView extends ItemView {
             columnOffset = (startingDayOfWeek - weekStartDay + 7) % 7;
         }
 
-        const dayCells: HTMLElement[] = [];
-
         const activeMultiDayEntries: MultiDayEntry[] = [];
 
         multiDayEntries.forEach((entry) => {
@@ -2224,15 +2360,30 @@ export class LinearCalendarView extends ItemView {
             }
         });
 
+        const dates = Array.from({ length: daysInMonth }, (_, index) => new Date(year, month, index + 1));
+        this.renderDayRow(row, dates, notesMap, activeMultiDayEntries, columnOffset, maxDayCells);
+    }
+
+    private renderDayRow(
+        row: HTMLTableRowElement,
+        dates: Date[],
+        notesMap: Map<string, NoteInfo[]>,
+        activeMultiDayEntries: MultiDayEntry[],
+        columnOffset: number,
+        maxDayCells: number
+    ): void {
+        const periodicSettings = this.plugin.settings.periodicNotes;
+        const weekDisplayMode = periodicSettings.weekly.enabled ? periodicSettings.weekNumberDisplay : 'none';
+        const dayCells: HTMLElement[] = [];
         const occupiedRows: { row: number; start: number; end: number }[] = [];
-        const barPositions = new Map<string, { rowIndex: number; startCol: number; endCol: number; span: number }>();
+        const barPositions = new Map<MultiDayEntry, { rowIndex: number; startCol: number; endCol: number; span: number }>();
 
         activeMultiDayEntries.forEach((entry) => {
-            const startDay = entry.startDate.getDate();
-            const endDay = entry.endDate.getDate();
-
-            const startCol = columnOffset + startDay - 1;
-            const endCol = columnOffset + endDay - 1;
+            const startIndex = dates.findIndex(date => this.dateToKey(date) === this.dateToKey(entry.startDate));
+            const endIndex = dates.findIndex(date => this.dateToKey(date) === this.dateToKey(entry.endDate));
+            if (startIndex < 0 || endIndex < 0) return;
+            const startCol = columnOffset + startIndex;
+            const endCol = columnOffset + endIndex;
             const span = endCol - startCol + 1;
 
             if (span <= 0) return;
@@ -2247,7 +2398,7 @@ export class LinearCalendarView extends ItemView {
             }
 
             occupiedRows.push({ row: rowIndex, start: startCol, end: endCol + 1 });
-            barPositions.set(entry.file.path + '-' + entry.month, { rowIndex, startCol, endCol, span });
+            barPositions.set(entry, { rowIndex, startCol, endCol, span });
         });
 
         const maxBarRow = occupiedRows.length > 0 ? Math.max(...occupiedRows.map(o => o.row)) : -1;
@@ -2267,8 +2418,8 @@ export class LinearCalendarView extends ItemView {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
 
-        for (let day = 1; day <= daysInMonth; day++) {
-            const date = new Date(year, month, day);
+        dates.forEach((date, index) => {
+            const day = date.getDate();
             const dateKey = this.dateToKey(date);
             const dayOfWeek = date.getDay();
             const isWeekStart = dayOfWeek === this.plugin.settings.weekStartDay || day === 1;
@@ -2276,6 +2427,9 @@ export class LinearCalendarView extends ItemView {
             const weekNumber = moment(date).week();
 
             const dayCell = row.createEl('td', { cls: 'day-cell' });
+            dayCell.dataset.date = dateKey;
+            const isMonthBoundary = index > 0 && date.getMonth() !== dates[index - 1].getMonth();
+            if (isMonthBoundary) dayCell.addClass('month-boundary');
 
             // Add alternating week highlight or highlighted weekday style
             if (this.plugin.settings.alternatingWeekHighlights) {
@@ -2320,10 +2474,10 @@ export class LinearCalendarView extends ItemView {
                 } else if (borderConfig.mode === 'custom' && borderConfig.customColor) {
                     borderColor = borderConfig.customColor;
                 }
-                dayCell.style.borderLeft = `1px solid ${borderColor}`;
+                if (!isMonthBoundary) dayCell.style.borderLeft = `1px solid ${borderColor}`;
             }
 
-            const dayIndex = columnOffset + day - 1;
+            const dayIndex = columnOffset + index;
             const barsAbove = occupiedRows.filter(o => o.start <= dayIndex && o.end > dayIndex).length;
             if (barsAbove > 0) {
                 dayCell.style.paddingTop = `${topPadding}px`;
@@ -2477,9 +2631,9 @@ export class LinearCalendarView extends ItemView {
             if (date.getTime() === today.getTime()) {
                 dayCell.addClass('today');
             }
-        }
+        });
 
-        const cellsUsed = columnOffset + daysInMonth;
+        const cellsUsed = columnOffset + dates.length;
         const remainingCells = maxDayCells - cellsUsed;
         for (let i = 0; i < remainingCells; i++) {
             const emptyCell = row.createEl('td', { cls: 'day-cell empty' });
@@ -2488,7 +2642,7 @@ export class LinearCalendarView extends ItemView {
 
         // Create multi-day bars
         activeMultiDayEntries.forEach((entry) => {
-            const pos = barPositions.get(entry.file.path + '-' + entry.month);
+            const pos = barPositions.get(entry);
             if (!pos) return;
 
             const firstDayCell = dayCells[pos.startCol];
@@ -2575,7 +2729,7 @@ export class LinearCalendarView extends ItemView {
 
         // After creating bars, recompute stacked tops using measured heights to avoid overlaps
         requestAnimationFrame(() => {
-            const allBars = Array.from(calendarTable.querySelectorAll<HTMLElement>('.multi-day-bar')) as HTMLElement[];
+            const allBars = Array.from(row.querySelectorAll<HTMLElement>('.multi-day-bar'));
             if (allBars.length > 0) {
                 const gap = 4; // px gap between stacked bars (matches earlier gap)
                 const rows = new Map<number, HTMLElement[]>();

@@ -2,6 +2,7 @@ import { TFile } from 'obsidian';
 
 export interface LinearCalendarSettings {
     currentYear: number;
+    calendarMode: 'normal' | 'superlinear';
     dailyNoteFormat: string;
     dailyNoteFolderMode: 'obsidian' | 'custom';
     dailyNoteCustomFolder: string;
@@ -346,6 +347,7 @@ export const DEFAULT_PERIODIC_NOTES: PeriodicNotesSettings = {
 
 export const DEFAULT_SETTINGS: LinearCalendarSettings = {
     currentYear: new Date().getFullYear(),
+    calendarMode: 'normal',
     dailyNoteFormat: 'YYYY-MM-DD',
     dailyNoteFolderMode: 'obsidian',
     dailyNoteCustomFolder: '',

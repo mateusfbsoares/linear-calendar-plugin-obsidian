@@ -18,6 +18,10 @@ This plugin is being developed with the help of AI.
 
 ## ✨ Features
 
+### Superlinear mode
+
+Use the **Superlinear** toggle in the calendar header to switch between the normal calendar and a single continuous row from today through 35 days ahead (36 days including today). Month labels and vertical dividers mark each month change. Your selected mode is saved, and switching back restores your normal year and month range.
+
 ### 📝 Note Display
 
 - **Single-day notes**: Notes appear in their respective day cells

@@ -605,7 +605,7 @@ export class CalendarSettingTab extends PluginSettingTab {
                 .setName('Week 1 color')
                 .setDesc('Color for the first alternating week.')
                 .addExtraButton(button => {
-                    const container = button.setIcon('palette');
+                    button.setIcon('palette');
                     button.setTooltip('Pick a color for week 1');
                     return button;
                 });
@@ -618,7 +618,7 @@ export class CalendarSettingTab extends PluginSettingTab {
                 .setName('Week 2 color')
                 .setDesc('Color for the second alternating week.')
                 .addExtraButton(button => {
-                    const container = button.setIcon('palette');
+                    button.setIcon('palette');
                     button.setTooltip('Pick a color for week 2');
                     return button;
                 });
