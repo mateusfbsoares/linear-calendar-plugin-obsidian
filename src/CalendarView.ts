@@ -658,7 +658,7 @@ export class LinearCalendarView extends ItemView {
     private buildRecurringLabel(file: TFile, rule: RecurringPropertyRule, startYear: number | null, occDate: Date): string {
         const { titleDisplay, titleSeparator, propertyName } = rule;
         const sep = titleSeparator ?? '–';
-        const base = file.basename;
+        const base = this.getDisplayName(file);
 
         if (titleDisplay === 'title') return base;
 
@@ -1103,30 +1103,69 @@ export class LinearCalendarView extends ItemView {
         return file.basename.length > match[0].length;
     }
 
+    private getTitleAfterMatchingRule(file: TFile): string {
+        const category = this.getCategoryForFile(file);
+        const conditions = [...(category?.conditions ?? [])];
+        if (this.plugin.settings.filterMode === 'include' && this.filePassesFilter(file)) {
+            conditions.push(...this.plugin.settings.filterConditions);
+        }
+
+        let titleStart = 0;
+        for (const condition of conditions) {
+            if (condition.property !== 'file.name' && condition.property !== 'file.basename') continue;
+            if (!this.evaluateCondition(file, condition)) continue;
+
+            const filename = condition.property === 'file.name' ? file.name : file.basename;
+            let matchEnd = 0;
+            if ((condition.operator === 'contains' || condition.operator === 'startsWith') && condition.value) {
+                const index = filename.toLowerCase().indexOf(condition.value.toLowerCase());
+                if (index >= 0) matchEnd = index + condition.value.length;
+            } else if (condition.operator === 'matches' || condition.operator === 'matchesDatePattern') {
+                const pattern = condition.operator === 'matchesDatePattern'
+                    ? `^${this.formatToRegexPattern(condition.value || 'YYYY-MM-DD')}`
+                    : condition.value;
+                try {
+                    const match = new RegExp(pattern).exec(filename);
+                    if (match && match[0].length > 0) matchEnd = match.index + match[0].length;
+                } catch {
+                    continue;
+                }
+            }
+
+            // Ignore metadata/negative rules and matches that would leave an empty title.
+            if (matchEnd > titleStart && file.basename.slice(matchEnd).trim()) {
+                titleStart = matchEnd;
+            }
+        }
+
+        return titleStart > 0 ? file.basename.slice(titleStart).trim() : file.basename;
+    }
+
     getDisplayName(file: TFile): string {
+        const title = this.getTitleAfterMatchingRule(file);
         if (!this.plugin.settings.hideDateInTitle) {
-            return file.basename;
+            return title;
         }
 
         // Check if there are multiple dates in the title
         const datePattern = /\d{4}-\d{2}-\d{2}/g;
-        const matches = file.basename.match(datePattern);
+        const matches = title.match(datePattern);
 
         if (matches && matches.length > 1) {
             if (!this.plugin.settings.hideSecondDateInTitle) {
                 // Only hide the first date, keep everything after it
                 const startDatePattern = /^\d{4}-\d{2}-\d{2}\s*/;
-                return file.basename.replace(startDatePattern, '').trim() || file.basename;
+                return title.replace(startDatePattern, '').trim() || title;
             }
             // Hide first date, the connector, and the second date
             // Pattern: leading date, optional whitespace, any non-date connector text, second date, optional trailing whitespace
             const multiDatePattern = /^\d{4}-\d{2}-\d{2}\s*.*?\d{4}-\d{2}-\d{2}\s*/;
-            return file.basename.replace(multiDatePattern, '').trim() || file.basename;
+            return title.replace(multiDatePattern, '').trim() || title;
         }
 
         // Single date: remove date portion from the beginning
         const startDatePattern = /^\d{4}-\d{2}-\d{2}\s*/;
-        return file.basename.replace(startDatePattern, '').trim() || file.basename;
+        return title.replace(startDatePattern, '').trim() || title;
     }
 
     shouldShowNote(file: TFile): boolean {
@@ -2584,10 +2623,7 @@ export class LinearCalendarView extends ItemView {
 
                     // Add title — use recurringLabel when available
                     const displayText = noteInfo.recurringLabel ?? this.getDisplayName(noteInfo.file);
-                    // remove dates in the format xxxx-xx-xx from the display text if present
-                    const datePattern = /\b\d{4}-\d{2}-\d{2}\b/g;
-                    const cleanedDisplayText = displayText.replace(datePattern, '').trim();
-                    noteLink.createEl('span', { text: cleanedDisplayText });
+                    noteLink.createEl('span', { text: displayText });
 
                     noteLink.setAttr('data-href', noteInfo.file.path);
 

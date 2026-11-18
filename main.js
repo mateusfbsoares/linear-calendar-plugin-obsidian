@@ -10478,7 +10478,7 @@ var init_CalendarView = __esm({
       buildRecurringLabel(file, rule, startYear, occDate) {
         const { titleDisplay, titleSeparator, propertyName } = rule;
         const sep = titleSeparator != null ? titleSeparator : "\u2013";
-        const base = file.basename;
+        const base = this.getDisplayName(file);
         if (titleDisplay === "title") return base;
         const propLabel = propertyName.charAt(0).toUpperCase() + propertyName.slice(1);
         const join = (parts) => sep ? parts.join(` ${sep} `) : parts.join(" ");
@@ -10808,22 +10808,54 @@ var init_CalendarView = __esm({
         if (!match) return false;
         return file.basename.length > match[0].length;
       }
+      getTitleAfterMatchingRule(file) {
+        var _a;
+        const category = this.getCategoryForFile(file);
+        const conditions = [...(_a = category == null ? void 0 : category.conditions) != null ? _a : []];
+        if (this.plugin.settings.filterMode === "include" && this.filePassesFilter(file)) {
+          conditions.push(...this.plugin.settings.filterConditions);
+        }
+        let titleStart = 0;
+        for (const condition of conditions) {
+          if (condition.property !== "file.name" && condition.property !== "file.basename") continue;
+          if (!this.evaluateCondition(file, condition)) continue;
+          const filename = condition.property === "file.name" ? file.name : file.basename;
+          let matchEnd = 0;
+          if ((condition.operator === "contains" || condition.operator === "startsWith") && condition.value) {
+            const index = filename.toLowerCase().indexOf(condition.value.toLowerCase());
+            if (index >= 0) matchEnd = index + condition.value.length;
+          } else if (condition.operator === "matches" || condition.operator === "matchesDatePattern") {
+            const pattern = condition.operator === "matchesDatePattern" ? `^${this.formatToRegexPattern(condition.value || "YYYY-MM-DD")}` : condition.value;
+            try {
+              const match = new RegExp(pattern).exec(filename);
+              if (match && match[0].length > 0) matchEnd = match.index + match[0].length;
+            } catch (e) {
+              continue;
+            }
+          }
+          if (matchEnd > titleStart && file.basename.slice(matchEnd).trim()) {
+            titleStart = matchEnd;
+          }
+        }
+        return titleStart > 0 ? file.basename.slice(titleStart).trim() : file.basename;
+      }
       getDisplayName(file) {
+        const title = this.getTitleAfterMatchingRule(file);
         if (!this.plugin.settings.hideDateInTitle) {
-          return file.basename;
+          return title;
         }
         const datePattern = /\d{4}-\d{2}-\d{2}/g;
-        const matches = file.basename.match(datePattern);
+        const matches = title.match(datePattern);
         if (matches && matches.length > 1) {
           if (!this.plugin.settings.hideSecondDateInTitle) {
             const startDatePattern2 = /^\d{4}-\d{2}-\d{2}\s*/;
-            return file.basename.replace(startDatePattern2, "").trim() || file.basename;
+            return title.replace(startDatePattern2, "").trim() || title;
           }
           const multiDatePattern = /^\d{4}-\d{2}-\d{2}\s*.*?\d{4}-\d{2}-\d{2}\s*/;
-          return file.basename.replace(multiDatePattern, "").trim() || file.basename;
+          return title.replace(multiDatePattern, "").trim() || title;
         }
         const startDatePattern = /^\d{4}-\d{2}-\d{2}\s*/;
-        return file.basename.replace(startDatePattern, "").trim() || file.basename;
+        return title.replace(startDatePattern, "").trim() || title;
       }
       shouldShowNote(file) {
         if (this.isCategoryHidden(file)) return false;
@@ -11886,9 +11918,7 @@ var init_CalendarView = __esm({
                 }
               }
               const displayText = (_a2 = noteInfo.recurringLabel) != null ? _a2 : this.getDisplayName(noteInfo.file);
-              const datePattern = /\b\d{4}-\d{2}-\d{2}\b/g;
-              const cleanedDisplayText = displayText.replace(datePattern, "").trim();
-              noteLink.createEl("span", { text: cleanedDisplayText });
+              noteLink.createEl("span", { text: displayText });
               noteLink.setAttr("data-href", noteInfo.file.path);
               noteLink.addEventListener("mouseenter", (event) => {
                 var _a3;

@@ -27,6 +27,7 @@ Use the **Superlinear** toggle in the calendar header to switch between the norm
 - **Single-day notes**: Notes appear in their respective day cells
 - **Multi-day events**: Events spanning multiple days shown as horizontal bars
 - **Clickable notes**: Click any note to open it instantly
+- **Rule-based titles**: When a filename rule matches, event titles show the text after the matching substring, including for multi-day and recurring events.
 - **Instant tooltips**: Hover over any note to see the full title immediately
 - **Note preview**: Cmd/Ctrl + hover to see a preview of any note
 - **Hide/Show notes of categories**: click on the eye icon to toggle visibility
